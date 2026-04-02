@@ -70,9 +70,24 @@ python3 -c "from huggingface_hub import hf_hub_download; hf_hub_download('unslot
 python3 -c "from huggingface_hub import hf_hub_download; hf_hub_download('unsloth/gemma-4-E2B-it-GGUF', 'gemma-4-E2B-it-Q8_0.gguf', local_dir='.')"
 ```
 
----
+## OpenCode Setup
 
-## Running
+To use OpenCode as a coding agent with the local models:
+
+### 1. Start the model server
+In one terminal, start the server:
+```bash
+./run.sh server
+```
+
+### 2. Start OpenCode
+In a second terminal, navigate to your project and run:
+```bash
+cd ~/your-project
+opencode
+```
+
+**Note:** The configuration at `~/.config/opencode/opencode.json` is pre-configured for both models. The 26B MoE is the default (best for agentic loops). To use the 31B model for higher quality, run `./run.sh server-31b` instead.
 
 ### Recommended: 26B MoE Q8 (interactive chat)
 
