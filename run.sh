@@ -59,6 +59,7 @@ case "$1" in
       -m "$HOME/gemma4/gemma-4-26B-A4B-it-Q8_0.gguf" \
       --host 127.0.0.1 --port 8080 \
       -ngl 99 -fa on --jinja \
+      -ctk q8_0 -ctv turbo4 \
       -c 131072
     ;;
   server-31b)
@@ -68,6 +69,7 @@ case "$1" in
       -m "$HOME/gemma4/gemma-4-31B-it-TQ4_1S-config-i.gguf" \
       --host 127.0.0.1 --port 8080 \
       -ngl 99 -fa on --jinja \
+      -ctk q8_0 -ctv turbo4 \
       -c 131072
     ;;
   ""|q8)
