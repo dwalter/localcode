@@ -1,4 +1,6 @@
-# Gemma 4 on Mac Studio (M3 Ultra, 512GB)
+# Local code
+
+## Gemma 4 on Mac Studio (M3 Ultra, 512GB)
 
 Local LLM setup using llama.cpp with Metal acceleration. Benchmarked April 2026.
 
