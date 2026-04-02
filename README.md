@@ -72,22 +72,34 @@ python3 -c "from huggingface_hub import hf_hub_download; hf_hub_download('unslot
 
 ## OpenCode Setup
 
-To use OpenCode as a coding agent with the local models:
+OpenCode is configured as a fully local coding agent backed by Gemma 4 via llama-server.
+Config: `~/.config/opencode/opencode.json` — defaults to 26B MoE Q8 (best for agentic loops).
 
-### 1. Start the model server
-In one terminal, start the server:
+### Recommended: `oc` (auto-managed server)
+
 ```bash
-./run.sh server
+oc
 ```
 
-### 2. Start OpenCode
-In a second terminal, navigate to your project and run:
+`oc.sh` handles everything: starts llama-server if not already running, shares it across
+concurrent sessions, and shuts it down when the last session exits. Add to your shell once:
+
 ```bash
+# Already added to ~/.zshrc:
+alias oc="$HOME/gemma4/oc.sh"
+```
+
+### Manual: two-terminal setup
+
+```bash
+# Terminal 1
+./run.sh server         # 26B MoE Q8 (default)
+./run.sh server-31b     # 31B TQ4_1S (higher quality)
+
+# Terminal 2
 cd ~/your-project
 opencode
 ```
-
-**Note:** The configuration at `~/.config/opencode/opencode.json` is pre-configured for both models. The 26B MoE is the default (best for agentic loops). To use the 31B model for higher quality, run `./run.sh server-31b` instead.
 
 ### Recommended: 26B MoE Q8 (interactive chat)
 
@@ -215,7 +227,7 @@ multiple attempts, longer chain-of-thought) is practical in real time.
       boost tok/s on code generation tasks where prompt patterns repeat in output
 - [ ] llama-server setup for API-compatible endpoint
 - [ ] MCP integration (web search, GitHub, HuggingFace)
-- [ ] Coding agent workflow
+- [x] Coding agent workflow — opencode + oc.sh
 - [ ] PPL benchmark: TQ4_1S vs Q8_0 baseline on wikitext-2 (expected ~+1-4% for Gemma)
 - [ ] Test TQ4_1S + speculative decoding (E2B draft) for 31B gen speed
 - [ ] Post results to TurboQuant+ [PR #45](https://github.com/TheTom/llama-cpp-turboquant/pull/45)
@@ -227,21 +239,27 @@ multiple attempts, longer chain-of-thought) is practical in real time.
 ```
 ~/gemma4/
 ├── README.md
-├── run.sh                          # Chat with recommended model
-├── benchmark.sh                    # Run full benchmark suite
-├── llama.cpp/                      # Built from source (HEAD)
+├── run.sh                                 # Chat modes + manual server start
+├── oc.sh                                  # opencode with auto-managed llama-server
+├── benchmark.sh                           # Run full benchmark suite
+├── gemma4-31b-config-i.txt               # TQ4_1S tensor type map
+├── llama.cpp/                             # Built from source (HEAD)
 │   └── build/bin/
 │       ├── llama-cli
 │       ├── llama-bench
-│       ├── llama-speculative
-│       └── llama-lookup            # For prompt lookup decoding (next step)
-├── venv/                           # arm64 Python 3.11 venv
-├── gemma-4-26B-A4B-it-Q8_0.gguf            # 25G — recommended
-├── gemma-4-26B-A4B-it-UD-Q4_K_M.gguf      # 15.7G
-├── gemma-4-31B-it-Q8_0.gguf               # 30.4G
-├── gemma-4-31B-it-Q4_K_M.gguf             # 17.1G
-├── gemma-4-31B-it-TQ4_1S-config-i.gguf   # 18.9G — compressed (experimental)
-├── gemma4-31b-config-i.txt                # tensor type map for TQ4_1S compression
-├── gemma-4-E2B-it-Q8_0.gguf              # 5G — draft model for speculative decoding
-└── llama-cpp-turboquant/                  # TurboQuant+ fork, branch pr/tq4-weight-compression
+│       └── llama-speculative
+├── llama-cpp-turboquant/                  # TurboQuant+ fork (pr/tq4-weight-compression)
+│   └── build/bin/
+│       ├── llama-server                   # Used by oc.sh and run.sh server modes
+│       ├── llama-quantize                 # Used for TQ4_1S compression
+│       └── llama-bench
+├── claw-code/                             # Claw Code (reference, not yet usable)
+├── opencode/                              # OpenCode source (reference)
+├── venv/                                  # arm64 Python 3.11 venv
+├── gemma-4-26B-A4B-it-Q8_0.gguf         # 25G — recommended (used by oc.sh)
+├── gemma-4-26B-A4B-it-UD-Q4_K_M.gguf   # 15.7G
+├── gemma-4-31B-it-Q8_0.gguf             # 30.4G
+├── gemma-4-31B-it-Q4_K_M.gguf           # 17.1G
+├── gemma-4-31B-it-TQ4_1S-config-i.gguf  # 18.9G — compressed (experimental)
+└── gemma-4-E2B-it-Q8_0.gguf             # 5G — draft model for speculative decoding
 ```
