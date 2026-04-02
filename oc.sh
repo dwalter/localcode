@@ -67,4 +67,4 @@ else
     echo "llama-server already running on :$PORT"
 fi
 
-opencode "$@"
+/opt/homebrew/bin/opencode "$@"
