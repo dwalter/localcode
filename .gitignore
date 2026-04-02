@@ -1,4 +1,6 @@
 venv/
 llama.cpp/
 llama-cpp-turboquant/
+claw-code/
+opencode/
 *.gguf
