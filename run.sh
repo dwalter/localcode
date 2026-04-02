@@ -26,7 +26,6 @@ case "$1" in
       -m "$HOME/gemma4/gemma-4-31B-it-Q8_0.gguf" \
       -md "$HOME/gemma4/gemma-4-E2B-it-Q8_0.gguf" \
       -ngl 99 -ngld 99 \
-      --chat-template gemma \
       -cnv
     ;;
   31b-spec-q4)
@@ -35,7 +34,6 @@ case "$1" in
       -m "$HOME/gemma4/gemma-4-31B-it-Q4_K_M.gguf" \
       -md "$HOME/gemma4/gemma-4-E2B-it-Q8_0.gguf" \
       -ngl 99 -ngld 99 \
-      --chat-template gemma \
       -cnv
     ;;
   ""|q8)
@@ -57,6 +55,5 @@ esac
 exec "$LLAMA" \
   -m "$MODEL" \
   -ngl 99 \
-  -fa \
-  --chat-template gemma \
+  -fa on \
   -cnv
