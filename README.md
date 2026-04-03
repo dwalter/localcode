@@ -291,23 +291,32 @@ Flash attention enabled, 512-token prompt, 200-token generation.
 | Model | Quant | Size | Gen (tok/s) | Prompt (tok/s) | Notes |
 |-------|-------|------|-------------|----------------|-------|
 | 26B MoE | Q4_K_M | 15.7G | **85.6** | 2372 | Best speed |
-| 26B MoE | Q8_0 | 25.0G | **82.1** | 2421 | **Recommended** |
+| 26B MoE | Q8_0 | 25.0G | **82.1** | 2421 | **Recommended for coding agent** |
 | 31B Dense | Q4_K_M | 17.1G | 27.6 | 356 | — |
 | 31B Dense | Q8_0 | 30.4G | 18.3 | 375 | Best quality |
 | 31B Dense Q4 | +Spec | +5G | **38.9** | — | 1.4x gen speedup |
 | 31B Dense Q8 | +Spec | +5G | **31.2** | — | 1.7x gen speedup |
 | 31B Dense | TQ4_1S | 18.9G | 18.5 | 320 | 38% smaller, same gen speed |
 
-> Qwen3.5 benchmarks not yet measured on this hardware — contributions welcome via [PR #45](https://github.com/TheTom/llama-cpp-turboquant/pull/45).
+### Qwen3.5
+
+| Model | Quant | Size | Gen (tok/s) | Prompt (tok/s) | Notes |
+|-------|-------|------|-------------|----------------|-------|
+| 35B-A3B MoE | Q4_K_M | 20.5G | **78.3** | 2215 | 3B active params, near-Gemma-MoE speed |
+| 9B Dense | Q8_0 | 8.9G | **58.4** | 1484 | Fast, small |
+| 27B Dense | Q4_K_M | 15.6G | 26.8 | 399 | Strong reasoning |
+| Qwopus v2 27B | Q4_K_M | 15.4G | 27.2 | 402 | Opus-distilled, best for coding/math |
 
 ### Key findings
 
+- **Qwen3.5-35B-A3B MoE is remarkably fast** — 78 tok/s at 21GB, nearly matches Gemma 4 26B MoE (82 tok/s). Only ~3B active params per token despite 35B total
+- **Gemma 4 26B MoE vs Qwen3.5-35B-A3B MoE**: Gemma is 5% faster, Qwen is the stronger reasoning model — both are excellent choices for the coding agent
+- **Qwopus v2 vs base Qwen3.5-27B**: identical speed (~27 tok/s), better coding/math quality from Opus distillation
 - **Gemma 4 26B MoE is ~4.5x faster than 31B Dense** — only ~4B active params per token
-- **Qwen3.5-35B-A3B MoE** activates only ~3B params per token — expect similar speed to a 4B dense model
 - **Speculative decoding on MoE is slower** — already so fast that draft+verify overhead is net negative
 - **Speculative decoding helps 31B Dense** — 1.4x on Q4, 1.7x on Q8
 - **TQ4_1S**: same gen speed as Q8_0, 38% smaller, ~15% slower prompt processing
-- **For an agentic coding loop**: throughput matters most — the model calls tools in tight sequences, so 82 tok/s vs 28 tok/s is a real UX difference
+- **For an agentic coding loop**: throughput matters most — 78-82 tok/s (MoE) vs 27 tok/s (dense) is a meaningful UX difference
 
 ---
 
