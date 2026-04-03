@@ -12,7 +12,7 @@
 #   LOCALCODE_MODEL=qwopus opencode
 #   LOCALCODE_MODEL=gemma-31b opencode
 
-DIR="$HOME/localcode"
+DIR="$(cd "$(dirname "$0")" && pwd)"
 SERVER_BIN="$DIR/llama-cpp-turboquant/build/bin/llama-server"
 PORT=8080
 SESSION_DIR="/tmp/localcode-sessions"

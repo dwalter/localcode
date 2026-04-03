@@ -26,7 +26,7 @@
 #   server-qwen-moe   Qwen3.5-35B-A3B Q4
 #   server-qwopus     Qwopus v2 27B Q4
 
-DIR="$HOME/localcode"
+DIR="$(cd "$(dirname "$0")" && pwd)"
 SERVER="$DIR/llama-cpp-turboquant/build/bin/llama-server"
 LLAMA="$DIR/llama.cpp/build/bin/llama-cli"
 SPEC="$DIR/llama.cpp/build/bin/llama-speculative"

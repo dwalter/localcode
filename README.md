@@ -100,24 +100,19 @@ pip install -U pip huggingface_hub
 source venv/bin/activate
 
 # 26B MoE Q8 — recommended for coding agent (25GB, 82 tok/s)
-huggingface-cli download unsloth/gemma-4-26B-A4B-it-GGUF \
-  gemma-4-26B-A4B-it-Q8_0.gguf --local-dir .
+python3 -c "from huggingface_hub import hf_hub_download; hf_hub_download('unsloth/gemma-4-26B-A4B-it-GGUF', 'gemma-4-26B-A4B-it-Q8_0.gguf', local_dir='.')"
 
 # 26B MoE Q4 — faster, smaller (15.7GB, 85 tok/s)
-huggingface-cli download unsloth/gemma-4-26B-A4B-it-GGUF \
-  gemma-4-26B-A4B-it-UD-Q4_K_M.gguf --local-dir .
+python3 -c "from huggingface_hub import hf_hub_download; hf_hub_download('unsloth/gemma-4-26B-A4B-it-GGUF', 'gemma-4-26B-A4B-it-UD-Q4_K_M.gguf', local_dir='.')"
 
 # 31B Dense Q8 — highest quality (30.4GB, 18 tok/s)
-huggingface-cli download unsloth/gemma-4-31B-it-GGUF \
-  gemma-4-31B-it-Q8_0.gguf --local-dir .
+python3 -c "from huggingface_hub import hf_hub_download; hf_hub_download('unsloth/gemma-4-31B-it-GGUF', 'gemma-4-31B-it-Q8_0.gguf', local_dir='.')"
 
 # 31B Dense Q4 — good with speculative decoding (17.1GB, 28 tok/s)
-huggingface-cli download unsloth/gemma-4-31B-it-GGUF \
-  gemma-4-31B-it-Q4_K_M.gguf --local-dir .
+python3 -c "from huggingface_hub import hf_hub_download; hf_hub_download('unsloth/gemma-4-31B-it-GGUF', 'gemma-4-31B-it-Q4_K_M.gguf', local_dir='.')"
 
 # E2B draft model — required for speculative decoding (5GB)
-huggingface-cli download unsloth/gemma-4-E2B-it-GGUF \
-  gemma-4-E2B-it-Q8_0.gguf --local-dir .
+python3 -c "from huggingface_hub import hf_hub_download; hf_hub_download('unsloth/gemma-4-E2B-it-GGUF', 'gemma-4-E2B-it-Q8_0.gguf', local_dir='.')"
 ```
 
 **Qwen3.5** (Apache 2.0 — no login required):
@@ -126,16 +121,13 @@ huggingface-cli download unsloth/gemma-4-E2B-it-GGUF \
 source venv/bin/activate
 
 # Qwen3.5-9B Q8 — fast small model (9.5GB, ~80 tok/s)
-huggingface-cli download unsloth/Qwen3.5-9B-GGUF \
-  Qwen3.5-9B-Q8_0.gguf --local-dir .
+python3 -c "from huggingface_hub import hf_hub_download; hf_hub_download('unsloth/Qwen3.5-9B-GGUF', 'Qwen3.5-9B-Q8_0.gguf', local_dir='.')"
 
 # Qwen3.5-27B Q4 — strong 27B reasoning model (16.7GB, ~28 tok/s)
-huggingface-cli download unsloth/Qwen3.5-27B-GGUF \
-  Qwen3.5-27B-Q4_K_M.gguf --local-dir .
+python3 -c "from huggingface_hub import hf_hub_download; hf_hub_download('unsloth/Qwen3.5-27B-GGUF', 'Qwen3.5-27B-Q4_K_M.gguf', local_dir='.')"
 
 # Qwen3.5-35B-A3B MoE Q4 — 35B total, ~3B active per token (21.4GB, very fast)
-huggingface-cli download unsloth/Qwen3.5-35B-A3B-GGUF \
-  Qwen3.5-35B-A3B-Q4_K_M.gguf --local-dir .
+python3 -c "from huggingface_hub import hf_hub_download; hf_hub_download('unsloth/Qwen3.5-35B-A3B-GGUF', 'Qwen3.5-35B-A3B-Q4_K_M.gguf', local_dir='.')"
 ```
 
 **Qwopus v2** — Qwen3.5-27B fine-tuned on Claude 4.6 Opus reasoning trajectories. Better at coding and math reasoning than base Qwen3.5-27B. No login required.
@@ -143,14 +135,12 @@ huggingface-cli download unsloth/Qwen3.5-35B-A3B-GGUF \
 ```bash
 source venv/bin/activate
 
-huggingface-cli download \
-  Jackrong/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-v2-GGUF \
-  Qwen3.5-27B.Q4_K_M.gguf \
-  --local-dir . \
-  --local-dir-use-symlinks False
-
-# Rename to match run.sh convention
-mv Qwen3.5-27B.Q4_K_M.gguf Qwen3.5-27B-Qwopus-v2-Q4_K_M.gguf
+python3 -c "
+import os
+from huggingface_hub import hf_hub_download
+path = hf_hub_download('Jackrong/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-v2-GGUF', 'Qwen3.5-27B.Q4_K_M.gguf', local_dir='.')
+os.rename(path, 'Qwen3.5-27B-Qwopus-v2-Q4_K_M.gguf')
+"
 ```
 
 ---
