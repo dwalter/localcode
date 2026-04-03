@@ -1,185 +1,248 @@
-# Local code
+# localcode
 
-## Gemma 4 on Mac Studio (M3 Ultra, 512GB)
+Run Gemma 4 fully locally on Apple Silicon via llama.cpp, with OpenCode as a coding agent. No cloud, no telemetry, no API keys.
 
-Local LLM setup using llama.cpp with Metal acceleration. Benchmarked April 2026.
+Benchmarked on a Mac Studio M3 Ultra (512GB). Most of the setup applies to any Apple Silicon Mac — see [hardware requirements](#hardware-requirements) for memory guidance by model.
 
 ---
 
-## Hardware
+## What's included
 
-- **Mac Studio M3 Ultra, 512GB unified memory**
-- Metal GPU acceleration via llama.cpp
-- All models fit comfortably in memory
+- **llama.cpp** built from source with Metal acceleration
+- **run.sh** — one-command chat for any model variant
+- **oc.sh** — OpenCode coding agent with auto-managed llama-server (starts on first use, stops when last session exits)
+- **TurboQuant+ weight compression** — shrinks 31B Q8 (30.4GB) to 18.9GB with identical generation speed
+- Benchmark results across all model/quant combinations
+
+---
+
+## Hardware requirements
+
+| Model | VRAM needed | Tested on |
+|-------|------------|-----------|
+| 26B MoE Q4 | ~18GB | M3 Ultra 512GB |
+| 26B MoE Q8 | ~28GB | M3 Ultra 512GB |
+| 31B Dense Q4 | ~20GB | M3 Ultra 512GB |
+| 31B Dense Q8 | ~34GB | M3 Ultra 512GB |
+| 31B TQ4_1S (compressed) | ~22GB | M3 Ultra 512GB |
+
+On Apple Silicon, VRAM = unified memory. An M2/M3 Max (96GB+) or Ultra is ideal. M3 Pro (36GB) can run the 26B MoE Q8 comfortably.
+
+---
+
+## Prerequisites
+
+- **macOS Sequoia** (14+) on Apple Silicon
+- **Xcode** with Command Line Tools: `xcode-select --install`
+  - If Sequoia complains: `sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer`
+- **Homebrew**: [brew.sh](https://brew.sh)
+- **CMake**: `brew install cmake`
+- **Python 3.11** (arm64): `brew install python@3.11`
+- **Node.js** (for OpenCode): `brew install node`
 
 ---
 
 ## Setup
 
-### 1. Build llama.cpp from source
-
-The Homebrew stable build (8610) does not support Gemma 4. Must build from HEAD.
+Clone this repo and set it as your working directory:
 
 ```bash
-cd ~/gemma4
+git clone https://github.com/dwalter/localcode.git ~/localcode
+cd ~/localcode
+```
+
+> All commands below assume you're in `~/localcode`. Adjust the path if you clone elsewhere.
+
+### 1. Build llama.cpp from source
+
+The Homebrew stable build does not support Gemma 4 — must build from HEAD.
+
+```bash
 git clone --depth 1 https://github.com/ggml-org/llama.cpp
 cd llama.cpp
 cmake -B build -DGGML_METAL=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release -j$(sysctl -n hw.logicalcpu) --target llama-bench llama-cli llama-lookup
+cmake --build build --config Release -j$(sysctl -n hw.logicalcpu) --target llama-bench llama-cli llama-speculative
+cd ..
 ```
 
-> If brew complains about Xcode/CLT on Sequoia, run `sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer` first.
+### 2. Build llama-cpp-turboquant (for llama-server + TQ4_1S compression)
 
-### 2. Python venv for model downloads
-
-Must use an arm64 Python — the system/Rosetta Python will fail to install MLX packages.
+This fork adds TurboQuant+ KV cache compression and the experimental TQ4_1S weight compression. It's also the build used for `llama-server` (the API server that OpenCode connects to).
 
 ```bash
-/opt/homebrew/bin/python3.11 -m venv ~/gemma4/venv
-source ~/gemma4/venv/bin/activate
-pip install -U pip
-pip install -U huggingface_hub mlx-lm
+git clone https://github.com/TheTom/llama-cpp-turboquant.git
+cd llama-cpp-turboquant
+git checkout pr/tq4-weight-compression
+cmake -B build -DGGML_METAL=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release -j$(sysctl -n hw.logicalcpu) --target llama-server llama-quantize llama-bench
+cd ..
 ```
 
-### 3. HuggingFace login (required for Gemma 4 gated models)
+### 3. Python venv for model downloads
 
-Accept the license at https://huggingface.co/google/gemma-4-27b-it, then:
+Must use an arm64 Python — the system or Rosetta Python may fail:
 
 ```bash
-source ~/gemma4/venv/bin/activate
+/opt/homebrew/bin/python3.11 -m venv venv
+source venv/bin/activate
+pip install -U pip huggingface_hub
+```
+
+### 4. Accept the Gemma 4 license
+
+Gemma 4 is a gated model. Accept the license at [huggingface.co/google/gemma-4-27b-it](https://huggingface.co/google/gemma-4-27b-it), then log in:
+
+```bash
+source venv/bin/activate
 huggingface-cli login
 ```
 
-### 4. Download models
+### 5. Download models
+
+Download whichever models you need. The 26B MoE Q8 is recommended as a starting point.
 
 ```bash
-source ~/gemma4/venv/bin/activate
-cd ~/gemma4
+source venv/bin/activate
 
-# Recommended: 26B MoE Q8 (best speed/quality balance)
-python3 -c "from huggingface_hub import hf_hub_download; hf_hub_download('unsloth/gemma-4-26B-A4B-it-GGUF', 'gemma-4-26B-A4B-it-Q8_0.gguf', local_dir='.')"
+# 26B MoE Q8 — recommended (25GB, 82 tok/s)
+huggingface-cli download unsloth/gemma-4-26B-A4B-it-GGUF \
+  gemma-4-26B-A4B-it-Q8_0.gguf --local-dir .
 
-# 26B MoE Q4 (smaller, similar speed)
-python3 -c "from huggingface_hub import hf_hub_download; hf_hub_download('unsloth/gemma-4-26B-A4B-it-GGUF', 'gemma-4-26B-A4B-it-UD-Q4_K_M.gguf', local_dir='.')"
+# 26B MoE Q4 — faster, smaller (15.7GB, 85 tok/s)
+huggingface-cli download unsloth/gemma-4-26B-A4B-it-GGUF \
+  gemma-4-26B-A4B-it-UD-Q4_K_M.gguf --local-dir .
 
-# 31B Dense Q8 (best quality, slower)
-python3 -c "from huggingface_hub import hf_hub_download; hf_hub_download('unsloth/gemma-4-31B-it-GGUF', 'gemma-4-31B-it-Q8_0.gguf', local_dir='.')"
+# 31B Dense Q8 — highest quality (30.4GB, 18 tok/s)
+huggingface-cli download unsloth/gemma-4-31B-it-GGUF \
+  gemma-4-31B-it-Q8_0.gguf --local-dir .
 
-# 31B Dense Q4 (smaller dense, good with speculative decoding)
-python3 -c "from huggingface_hub import hf_hub_download; hf_hub_download('unsloth/gemma-4-31B-it-GGUF', 'gemma-4-31B-it-Q4_K_M.gguf', local_dir='.')"
+# 31B Dense Q4 — good with speculative decoding (17.1GB, 28 tok/s)
+huggingface-cli download unsloth/gemma-4-31B-it-GGUF \
+  gemma-4-31B-it-Q4_K_M.gguf --local-dir .
 
-# E2B draft model (for speculative decoding with 31B Dense)
-python3 -c "from huggingface_hub import hf_hub_download; hf_hub_download('unsloth/gemma-4-E2B-it-GGUF', 'gemma-4-E2B-it-Q8_0.gguf', local_dir='.')"
-```
-
-## OpenCode Setup
-
-OpenCode is configured as a fully local coding agent backed by Gemma 4 via llama-server.
-Config: `~/.config/opencode/opencode.json` — defaults to 26B MoE Q8 (best for agentic loops).
-
-### Recommended: `oc` (auto-managed server)
-
-```bash
-oc
-```
-
-`oc.sh` handles everything: starts llama-server if not already running, shares it across
-concurrent sessions, and shuts it down when the last session exits. Add to your shell once:
-
-```bash
-# Already added to ~/.zshrc:
-alias oc="$HOME/gemma4/oc.sh"
-```
-
-### Manual: two-terminal setup
-
-```bash
-# Terminal 1
-./run.sh server         # 26B MoE Q8 (default)
-./run.sh server-31b     # 31B TQ4_1S (higher quality)
-
-# Terminal 2
-cd ~/your-project
-opencode
-```
-
-### Recommended: 26B MoE Q8 (interactive chat)
-
-```bash
-./run.sh
-```
-
-Or manually:
-
-```bash
-~/gemma4/llama.cpp/build/bin/llama-cli \
-  -m ~/gemma4/gemma-4-26B-A4B-it-Q8_0.gguf \
-  -ngl 99 -fa \
-  --chat-template gemma \
-  -cnv
-```
-
-### 26B MoE Q4
-
-```bash
-~/gemma4/llama.cpp/build/bin/llama-cli \
-  -m ~/gemma4/gemma-4-26B-A4B-it-UD-Q4_K_M.gguf \
-  -ngl 99 -fa \
-  --chat-template gemma \
-  -cnv
-```
-
-### 31B Dense Q8 (highest quality)
-
-```bash
-~/gemma4/llama.cpp/build/bin/llama-cli \
-  -m ~/gemma4/gemma-4-31B-it-Q8_0.gguf \
-  -ngl 99 -fa \
-  --chat-template gemma \
-  -cnv
-```
-
-### 31B Dense TQ4_1S (Q8 quality, 38% smaller — recommended)
-
-Uses the TurboQuant+ experimental weight compression branch. Same generation speed as Q8_0,
-11.5 GB smaller. See [TurboQuant+ PR #45](https://github.com/TheTom/llama-cpp-turboquant/pull/45).
-
-```bash
-~/gemma4/llama-cpp-turboquant/build/bin/llama-cli \
-  -m ~/gemma4/gemma-4-31B-it-TQ4_1S-config-i.gguf \
-  -ngl 99 -fa \
-  --chat-template gemma \
-  -cnv
-```
-
-With TurboQuant KV cache (useful at long context):
-
-```bash
-~/gemma4/llama-cpp-turboquant/build/bin/llama-cli \
-  -m ~/gemma4/gemma-4-31B-it-TQ4_1S-config-i.gguf \
-  -ngl 99 -fa \
-  -ctk q8_0 -ctv turbo4 \
-  --chat-template gemma \
-  -cnv
-```
-
-### 31B Dense Q4 + Speculative Decoding (best 31B speed)
-
-```bash
-~/gemma4/llama.cpp/build/bin/llama-speculative \
-  -m ~/gemma4/gemma-4-31B-it-Q4_K_M.gguf \
-  -md ~/gemma4/gemma-4-E2B-it-Q8_0.gguf \
-  -ngl 99 -ngld 99 \
-  --chat-template gemma \
-  -cnv
+# E2B draft model — required for speculative decoding (5GB)
+huggingface-cli download unsloth/gemma-4-E2B-it-GGUF \
+  gemma-4-E2B-it-Q8_0.gguf --local-dir .
 ```
 
 ---
 
-## Benchmark Results (M3 Ultra, 512GB)
+## Chat
 
-All results use flash attention (`-fa`), 512-token prompt, 200-token generation.
-Speculative decoding uses E2B Q8 as draft model.
+```bash
+./run.sh              # 26B MoE Q8 — recommended
+./run.sh q4           # 26B MoE Q4
+./run.sh 31b-q8       # 31B Dense Q8
+./run.sh 31b-q4       # 31B Dense Q4
+./run.sh 31b-tq4      # 31B TQ4_1S compressed (see below)
+./run.sh 31b-spec-q8  # 31B Q8 + speculative decoding (~31 tok/s)
+./run.sh 31b-spec-q4  # 31B Q4 + speculative decoding (~39 tok/s)
+```
+
+---
+
+## OpenCode coding agent
+
+OpenCode is a fully local, autonomous coding agent. It edits files, runs shell commands, reads errors, and loops — no human approval required at each step. Zero telemetry.
+
+### 1. Install OpenCode
+
+```bash
+npm install -g opencode-ai@latest
+```
+
+### 2. Configure OpenCode for llama-server
+
+Create `~/.config/opencode/opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "llama.cpp": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "llama-server (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:8080/v1"
+      },
+      "models": {
+        "gemma-4-26B-A4B-it-Q8_0.gguf": {
+          "name": "Gemma 4 26B MoE Q8 (local)",
+          "limit": { "context": 131072, "output": 32768 }
+        },
+        "gemma-4-31B-it-TQ4_1S-config-i.gguf": {
+          "name": "Gemma 4 31B TQ4_1S (local)",
+          "limit": { "context": 131072, "output": 32768 }
+        }
+      }
+    }
+  },
+  "model": "llama.cpp/gemma-4-26B-A4B-it-Q8_0.gguf"
+}
+```
+
+### 3. Add the shell wrapper to auto-manage the server
+
+Add this to your `~/.zshrc` (or `~/.bashrc`):
+
+```bash
+# Disable opencode outbound calls — fully local
+export OPENCODE_DISABLE_AUTOUPDATE=true
+export OPENCODE_DISABLE_MODELS_FETCH=true
+
+# Wrap opencode to auto-start/stop llama-server
+opencode() { "$HOME/localcode/oc.sh" "$@"; }
+```
+
+Then reload: `source ~/.zshrc`
+
+### 4. Use it
+
+```bash
+cd ~/your-project
+opencode
+```
+
+`oc.sh` starts llama-server automatically on first use, shares it across concurrent sessions, and shuts it down when the last session exits. The 26B MoE Q8 is used by default (best for agentic loops — 82 tok/s matters when the agent is making many tool calls).
+
+To use the 31B model instead, edit `~/.config/opencode/opencode.json` and change `"model"` to:
+```
+"llama.cpp/gemma-4-31B-it-TQ4_1S-config-i.gguf"
+```
+You'll also need the TQ4_1S compressed model (see below).
+
+---
+
+## TQ4_1S weight compression (experimental)
+
+Shrinks the 31B Q8 model from 30.4GB to 18.9GB with identical generation speed and minimal quality loss (~+1-4% perplexity predicted). Requires `llama-cpp-turboquant` built above.
+
+```bash
+# Generate the tensor type map
+python3 -c "
+n_layers = 60
+for i in range(2, n_layers - 2):
+    for t in ['attn_q', 'attn_k', 'attn_v', 'attn_output', 'ffn_gate', 'ffn_up']:
+        print(f'blk.{i}.{t}.weight=tq4_1s')
+    print(f'blk.{i}.ffn_down.weight=q4_k')
+" > gemma4-31b-config-i.txt
+
+# Compress (requires the Q8_0 source model)
+llama-cpp-turboquant/build/bin/llama-quantize \
+  --allow-requantize \
+  --tensor-type-file gemma4-31b-config-i.txt \
+  gemma-4-31B-it-Q8_0.gguf \
+  gemma-4-31B-it-TQ4_1S-config-i.gguf \
+  Q8_0
+```
+
+A pre-generated `gemma4-31b-config-i.txt` is included in this repo.
+
+---
+
+## Benchmark results (M3 Ultra, 512GB)
+
+Flash attention enabled, 512-token prompt, 200-token generation.
 
 | Model | Quant | Size | Gen (tok/s) | Prompt (tok/s) | Notes |
 |-------|-------|------|-------------|----------------|-------|
@@ -191,77 +254,49 @@ Speculative decoding uses E2B Q8 as draft model.
 | 31B Dense Q8 | +Spec | +5G | **31.2** | — | 1.7x gen speedup |
 | 31B Dense | TQ4_1S | 18.9G | 18.5 | 320 | 38% smaller, same gen speed (experimental) |
 
-### TurboQuant+ Weight Compression (TQ4_1S)
+### TQ4_1S detail
 
-Experimental post-training weight compression via [TurboQuant+ PR #45](https://github.com/TheTom/llama-cpp-turboquant/pull/45).
-Built from branch `pr/tq4-weight-compression` into `~/gemma4/llama-cpp-turboquant/`.
-
-| Model | Quant | Size | Gen (tok/s) | Prompt (tok/s) | Notes |
-|-------|-------|------|-------------|----------------|-------|
-| 31B Dense | Q8_0 (baseline) | 30.38G | 18.3 | 375 | — |
-| 31B Dense | TQ4_1S Config I | 18.87G | **18.5** | 320 | 38% smaller, identical gen speed |
-| 31B Dense | TQ4_1S + turbo4 KV | 18.87G | 17.5 | 316 | Long context bonus |
-
-Compression recipe ([gemma4-31b-config-i.txt](gemma4-31b-config-i.txt)): 56 middle layers (boundary 2+2),
-attn+ffn_gate/up = TQ4_1S, ffn_down = Q4_K.
+| | Q8_0 (source) | TQ4_1S | TQ4_1S + turbo4 KV |
+|---|---|---|---|
+| Size | 30.38G | 18.87G | 18.87G |
+| Gen (tok/s) | 18.3 | **18.5** | 17.5 |
+| Prompt (tok/s) | 375 | 320 | 316 |
 
 ### Key findings
 
-- **26B MoE** is ~4.5x faster than 31B Dense due to only ~4B active params per token
-- **Speculative decoding hurts the MoE** — it's already so fast that draft+verify overhead makes it slower
+- **26B MoE is ~4.5x faster than 31B Dense** — only ~4B active params per token
+- **Speculative decoding on MoE is slower** — already so fast that draft+verify overhead is net negative
 - **Speculative decoding helps 31B Dense** — 1.4x on Q4 (38.9 tok/s), 1.7x on Q8 (31.2 tok/s)
-- **Flash attention** gives a free ~3-5% boost with no downsides
-- **Q4 vs Q8 on MoE** is nearly identical in speed (~3% difference) — use Q8 for quality
-- **26B MoE Q8** runs at full Q8 quality in only 25GB — well within 512GB
-- **TQ4_1S**: 31B Q8 → 18.9 GB with identical gen speed. Prompt speed -15% (dequant overhead). Quality predicted ~+1-4% PPL (not yet measured)
-
-### Why 26B MoE over 31B Dense for coding
-
-For interactive coding workflows, the MoE at 81 tok/s means fast iteration loops.
-At 10x the generation speed vs the dense model, inference scaling (self-correction,
-multiple attempts, longer chain-of-thought) is practical in real time.
+- **TQ4_1S**: same generation speed as Q8_0, 38% smaller, ~15% slower prompt processing
+- **26B MoE Q8 is the best choice for an agentic coding loop** — throughput matters more than peak quality when the agent is calling tools in tight sequences
 
 ---
 
-## Next Steps
-
-- [ ] Prompt lookup decoding (`llama-lookup`) for coding agent context — likely to significantly
-      boost tok/s on code generation tasks where prompt patterns repeat in output
-- [ ] llama-server setup for API-compatible endpoint
-- [ ] MCP integration (web search, GitHub, HuggingFace)
-- [x] Coding agent workflow — opencode + oc.sh
-- [ ] PPL benchmark: TQ4_1S vs Q8_0 baseline on wikitext-2 (expected ~+1-4% for Gemma)
-- [ ] Test TQ4_1S + speculative decoding (E2B draft) for 31B gen speed
-- [ ] Post results to TurboQuant+ [PR #45](https://github.com/TheTom/llama-cpp-turboquant/pull/45)
-
----
-
-## File Layout
+## File layout
 
 ```
-~/gemma4/
+~/localcode/
 ├── README.md
 ├── run.sh                                 # Chat modes + manual server start
-├── oc.sh                                  # opencode with auto-managed llama-server
-├── benchmark.sh                           # Run full benchmark suite
-├── gemma4-31b-config-i.txt               # TQ4_1S tensor type map
-├── llama.cpp/                             # Built from source (HEAD)
-│   └── build/bin/
-│       ├── llama-cli
-│       ├── llama-bench
-│       └── llama-speculative
-├── llama-cpp-turboquant/                  # TurboQuant+ fork (pr/tq4-weight-compression)
-│   └── build/bin/
-│       ├── llama-server                   # Used by oc.sh and run.sh server modes
-│       ├── llama-quantize                 # Used for TQ4_1S compression
-│       └── llama-bench
-├── claw-code/                             # Claw Code (reference, not yet usable)
-├── opencode/                              # OpenCode source (reference)
-├── venv/                                  # arm64 Python 3.11 venv
-├── gemma-4-26B-A4B-it-Q8_0.gguf         # 25G — recommended (used by oc.sh)
-├── gemma-4-26B-A4B-it-UD-Q4_K_M.gguf   # 15.7G
-├── gemma-4-31B-it-Q8_0.gguf             # 30.4G
-├── gemma-4-31B-it-Q4_K_M.gguf           # 17.1G
-├── gemma-4-31B-it-TQ4_1S-config-i.gguf  # 18.9G — compressed (experimental)
-└── gemma-4-E2B-it-Q8_0.gguf             # 5G — draft model for speculative decoding
+├── oc.sh                                  # OpenCode wrapper: auto-manages llama-server
+├── benchmark.sh                           # Reproduce benchmark results
+├── gemma4-31b-config-i.txt               # TQ4_1S tensor type map (pre-generated)
+├── llama.cpp/                             # Built from source (not committed)
+│   └── build/bin/llama-cli, llama-bench, llama-speculative
+├── llama-cpp-turboquant/                  # TurboQuant+ fork (not committed)
+│   └── build/bin/llama-server, llama-quantize, llama-bench
+├── claw-code/                             # Claw Code source reference (not committed)
+├── opencode/                              # OpenCode source reference (not committed)
+├── venv/                                  # Python venv for downloads (not committed)
+└── *.gguf                                 # Model files (not committed)
 ```
+
+---
+
+## Related projects
+
+- [llama.cpp](https://github.com/ggml-org/llama.cpp) — inference engine
+- [TurboQuant+](https://github.com/TheTom/turboquant_plus) — KV cache + weight compression
+- [OpenCode](https://github.com/sst/opencode) — local coding agent
+- [Claw Code](https://github.com/ultraworkers/claw-code-parity) — open-source Claude Code rewrite (early stage)
+- [Unsloth Gemma 4 GGUFs](https://huggingface.co/unsloth) — quantized model files
