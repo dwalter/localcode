@@ -304,6 +304,8 @@ Flash attention enabled, 512-token prompt, 200-token generation.
 |-------|-------|------|-------------|----------------|-------|
 | 35B-A3B MoE | Q4_K_M | 20.5G | **78.3** | 2215 | 3B active params, near-Gemma-MoE speed |
 | 9B Dense | Q8_0 | 8.9G | **58.4** | 1484 | Fast, small |
+| 27B Dense Q4 | +Spec | +0.8G | **59.6** | — | 2.2x speedup via 0.8B draft |
+| Qwopus v2 Q4 | +Spec | +0.8G | **60.2** | — | 2.2x speedup via 0.8B draft |
 | 27B Dense | Q4_K_M | 15.6G | 26.8 | 399 | Strong reasoning |
 | Qwopus v2 27B | Q4_K_M | 15.4G | 27.2 | 402 | Opus-distilled, best for coding/math |
 
@@ -311,7 +313,8 @@ Flash attention enabled, 512-token prompt, 200-token generation.
 
 - **Qwen3.5-35B-A3B MoE is remarkably fast** — 78 tok/s at 21GB, nearly matches Gemma 4 26B MoE (82 tok/s). Only ~3B active params per token despite 35B total
 - **Gemma 4 26B MoE vs Qwen3.5-35B-A3B MoE**: Gemma is 5% faster, Qwen is the stronger reasoning model — both are excellent choices for the coding agent
-- **Qwopus v2 vs base Qwen3.5-27B**: identical speed (~27 tok/s), better coding/math quality from Opus distillation
+- **Qwen3.5-27B + speculative decoding (0.8B draft)**: 60 tok/s — 2.2x speedup. Makes Qwopus practical for interactive use
+- **Qwopus v2 vs base Qwen3.5-27B**: identical speed (~27 tok/s baseline, ~60 tok/s with spec), better coding/math quality from Opus distillation
 - **Gemma 4 26B MoE is ~4.5x faster than 31B Dense** — only ~4B active params per token
 - **Speculative decoding on MoE is slower** — already so fast that draft+verify overhead is net negative
 - **Speculative decoding helps 31B Dense** — 1.4x on Q4, 1.7x on Q8

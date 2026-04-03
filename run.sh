@@ -18,10 +18,10 @@
 #   qwen-27b-think      Qwen3.5-27B Q4         —  27 tok/s, 16.7G  (thinking on)
 #   qwen-27b-tq4        Qwen3.5-27B TQ4_1S     —  ~27 tok/s, ~19G  (compressed, thinking off)
 #   qwen-27b-tq4-think  Qwen3.5-27B TQ4_1S     —  ~27 tok/s, ~19G  (compressed, thinking on)
-#   qwen-27b-spec       Qwen3.5-27B Q4 + Spec  — faster, 0.8B draft
+#   qwen-27b-spec       Qwen3.5-27B Q4 + Spec  —  60 tok/s, 0.8B draft (2.2x speedup)
 #   qwen-35b-moe        Qwen3.5-35B-A3B Q4     —  78 tok/s, 21.4G  (3B active params)
 #   qwopus              Qwopus v2 27B Q4        —  27 tok/s, 15.4G  (Opus-distilled)
-#   qwopus-spec         Qwopus v2 27B + Spec    — faster, 0.8B draft
+#   qwopus-spec         Qwopus v2 27B + Spec    —  60 tok/s, 0.8B draft (2.2x speedup)
 #
 # --- API servers (for opencode) ---
 #   server                Gemma 4 26B MoE Q8         (default, recommended)
@@ -116,12 +116,11 @@ case "$1" in
     echo "Qwen3.5-27B TQ4_1S (~27 tok/s, compressed, thinking on)..."
     ;;
   qwen-27b-spec)
-    echo "Qwen3.5-27B Q4 + Speculative Decoding (~?? tok/s)..."
+    echo "Qwen3.5-27B Q4 + Speculative Decoding (~60 tok/s)..."
     exec "$SPEC" \
       -m "$DIR/Qwen3.5-27B-Q4_K_M.gguf" \
       -md "$DIR/Qwen3.5-0.8B-Q8_0.gguf" \
       -ngl 99 -ngld 99 \
-      --jinja --chat-template-kwargs "{\"enable_thinking\":false}" \
       -cnv
     ;;
   qwopus)
@@ -130,12 +129,11 @@ case "$1" in
     echo "Qwopus v2 27B Q4 (~27 tok/s, Opus-distilled reasoning)..."
     ;;
   qwopus-spec)
-    echo "Qwopus v2 27B Q4 + Speculative Decoding..."
+    echo "Qwopus v2 27B Q4 + Speculative Decoding (~60 tok/s)..."
     exec "$SPEC" \
       -m "$DIR/Qwen3.5-27B-Qwopus-v2-Q4_K_M.gguf" \
       -md "$DIR/Qwen3.5-0.8B-Q8_0.gguf" \
       -ngl 99 -ngld 99 \
-      --jinja --chat-template-kwargs "{\"enable_thinking\":true}" \
       -cnv
     ;;
   qwen-35b-moe)
