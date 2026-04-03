@@ -306,6 +306,8 @@ Flash attention enabled, 512-token prompt, 200-token generation.
 | 9B Dense | Q8_0 | 8.9G | **58.4** | 1484 | Fast, small |
 | 27B Dense Q4 | +Spec | +0.8G | **59.6** | — | 2.2x speedup via 0.8B draft |
 | Qwopus v2 Q4 | +Spec | +0.8G | **60.2** | — | 2.2x speedup via 0.8B draft |
+| 27B Dense | Q8_0 | 26.6G | 19.2 | 420 | Best quality |
+| 27B Dense | TQ4_1S | 19.1G | **19.7** | 385 | 28% smaller, same gen speed |
 | 27B Dense | Q4_K_M | 15.6G | 26.8 | 399 | Strong reasoning |
 | Qwopus v2 27B | Q4_K_M | 15.4G | 27.2 | 402 | Opus-distilled, best for coding/math |
 
@@ -318,7 +320,8 @@ Flash attention enabled, 512-token prompt, 200-token generation.
 - **Gemma 4 26B MoE is ~4.5x faster than 31B Dense** — only ~4B active params per token
 - **Speculative decoding on MoE is slower** — already so fast that draft+verify overhead is net negative
 - **Speculative decoding helps 31B Dense** — 1.4x on Q4, 1.7x on Q8
-- **TQ4_1S**: same gen speed as Q8_0, 38% smaller, ~15% slower prompt processing
+- **TQ4_1S on Gemma 4 31B**: same gen speed as Q8_0, 38% smaller (30.4G → 18.9G), ~15% slower prompt
+- **TQ4_1S on Qwen3.5-27B**: same gen speed as Q8_0, 28% smaller (26.6G → 19.1G), ~8% slower prompt (validated result from TurboQuant+ paper)
 - **For an agentic coding loop**: throughput matters most — 78-82 tok/s (MoE) vs 27 tok/s (dense) is a meaningful UX difference
 
 ---
