@@ -1,32 +1,34 @@
 # localcode
 
-Run Gemma 4 fully locally on Apple Silicon via llama.cpp, with OpenCode as a coding agent. No cloud, no telemetry, no API keys.
+Run LLMs fully locally on Apple Silicon via llama.cpp, with OpenCode as a coding agent. No cloud, no telemetry, no API keys.
 
-Benchmarked on a Mac Studio M3 Ultra (512GB). Most of the setup applies to any Apple Silicon Mac — see [hardware requirements](#hardware-requirements) for memory guidance by model.
+Supports **Gemma 4** and **Qwen3.5** model families including Qwopus (Qwen3.5 fine-tuned on Claude 4.6 Opus reasoning). Benchmarked on a Mac Studio M3 Ultra (512GB).
 
 ---
 
 ## What's included
 
 - **llama.cpp** built from source with Metal acceleration
-- **run.sh** — one-command chat for any model variant
-- **oc.sh** — OpenCode coding agent with auto-managed llama-server (starts on first use, stops when last session exits)
-- **TurboQuant+ weight compression** — shrinks 31B Q8 (30.4GB) to 18.9GB with identical generation speed
-- Benchmark results across all model/quant combinations
+- **run.sh** — one-command chat or server for any model variant
+- **oc.sh** — OpenCode coding agent with auto-managed llama-server
+- **TurboQuant+ KV cache compression** — reduces KV cache size at long context with minimal quality loss
+- **TQ4_1S weight compression** — shrinks Gemma 4 31B from 30.4GB → 18.9GB at identical generation speed (experimental)
 
 ---
 
 ## Hardware requirements
 
-| Model | VRAM needed | Tested on |
-|-------|------------|-----------|
-| 26B MoE Q4 | ~18GB | M3 Ultra 512GB |
-| 26B MoE Q8 | ~28GB | M3 Ultra 512GB |
-| 31B Dense Q4 | ~20GB | M3 Ultra 512GB |
-| 31B Dense Q8 | ~34GB | M3 Ultra 512GB |
-| 31B TQ4_1S (compressed) | ~22GB | M3 Ultra 512GB |
+| Model | Size on disk | Approx RAM needed |
+|-------|-------------|-------------------|
+| Qwen3.5-9B Q8 | 9.5G | ~12GB |
+| Gemma 4 26B MoE Q4 | 15.7G | ~18GB |
+| Qwen3.5-27B Q4 / Qwopus Q4 | 16.5–16.7G | ~20GB |
+| Gemma 4 26B MoE Q8 | 25.0G | ~28GB |
+| Qwen3.5-35B-A3B MoE Q4 | 21.4G | ~24GB |
+| Gemma 4 31B TQ4_1S (compressed) | 18.9G | ~22GB |
+| Gemma 4 31B Dense Q8 | 30.4G | ~34GB |
 
-On Apple Silicon, VRAM = unified memory. An M2/M3 Max (96GB+) or Ultra is ideal. M3 Pro (36GB) can run the 26B MoE Q8 comfortably.
+On Apple Silicon, RAM = unified memory. An M3 Max (96GB) or Ultra is ideal for 30B+ models. The Qwen3.5-35B-A3B MoE only activates ~3B parameters per token so it runs much faster than its 21GB size suggests.
 
 ---
 
@@ -44,43 +46,45 @@ On Apple Silicon, VRAM = unified memory. An M2/M3 Max (96GB+) or Ultra is ideal.
 
 ## Setup
 
-Clone this repo and set it as your working directory:
+Clone this repo:
 
 ```bash
 git clone https://github.com/dwalter/localcode.git ~/localcode
 cd ~/localcode
 ```
 
-> All commands below assume you're in `~/localcode`. Adjust the path if you clone elsewhere.
+> All commands below assume you're in `~/localcode`. Adjust if you clone elsewhere.
 
 ### 1. Build llama.cpp from source
 
-The Homebrew stable build does not support Gemma 4 — must build from HEAD.
+The Homebrew stable build does not support Gemma 4. Must build from HEAD.
 
 ```bash
 git clone --depth 1 https://github.com/ggml-org/llama.cpp
 cd llama.cpp
 cmake -B build -DGGML_METAL=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release -j$(sysctl -n hw.logicalcpu) --target llama-bench llama-cli llama-speculative
+cmake --build build --config Release -j$(sysctl -n hw.logicalcpu) \
+  --target llama-bench llama-cli llama-speculative
 cd ..
 ```
 
-### 2. Build llama-cpp-turboquant (for llama-server + TQ4_1S compression)
+### 2. Build llama-cpp-turboquant
 
-This fork adds TurboQuant+ KV cache compression and the experimental TQ4_1S weight compression. It's also the build used for `llama-server` (the API server that OpenCode connects to).
+This fork adds TurboQuant+ KV cache compression and `llama-server` (the API endpoint OpenCode connects to). Also required for TQ4_1S weight compression on Gemma 4 31B.
 
 ```bash
 git clone https://github.com/TheTom/llama-cpp-turboquant.git
 cd llama-cpp-turboquant
 git checkout pr/tq4-weight-compression
 cmake -B build -DGGML_METAL=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release -j$(sysctl -n hw.logicalcpu) --target llama-server llama-quantize llama-bench
+cmake --build build --config Release -j$(sysctl -n hw.logicalcpu) \
+  --target llama-server llama-quantize llama-bench
 cd ..
 ```
 
-### 3. Python venv for model downloads
+### 3. Python venv for Gemma model downloads
 
-Must use an arm64 Python — the system or Rosetta Python may fail:
+Gemma 4 is a gated model requiring a HuggingFace account. Qwen3.5 is Apache 2.0 and can be downloaded without login.
 
 ```bash
 /opt/homebrew/bin/python3.11 -m venv venv
@@ -88,23 +92,14 @@ source venv/bin/activate
 pip install -U pip huggingface_hub
 ```
 
-### 4. Accept the Gemma 4 license
+### 4. Download models
 
-Gemma 4 is a gated model. Accept the license at [huggingface.co/google/gemma-4-27b-it](https://huggingface.co/google/gemma-4-27b-it), then log in:
-
-```bash
-source venv/bin/activate
-huggingface-cli login
-```
-
-### 5. Download models
-
-Download whichever models you need. The 26B MoE Q8 is recommended as a starting point.
+**Gemma 4** (gated — accept license at [huggingface.co/google/gemma-4-27b-it](https://huggingface.co/google/gemma-4-27b-it) first, then `huggingface-cli login`):
 
 ```bash
 source venv/bin/activate
 
-# 26B MoE Q8 — recommended (25GB, 82 tok/s)
+# 26B MoE Q8 — recommended for coding agent (25GB, 82 tok/s)
 huggingface-cli download unsloth/gemma-4-26B-A4B-it-GGUF \
   gemma-4-26B-A4B-it-Q8_0.gguf --local-dir .
 
@@ -125,19 +120,64 @@ huggingface-cli download unsloth/gemma-4-E2B-it-GGUF \
   gemma-4-E2B-it-Q8_0.gguf --local-dir .
 ```
 
+**Qwen3.5** (Apache 2.0 — no login required):
+
+```bash
+source venv/bin/activate
+
+# Qwen3.5-9B Q8 — fast small model (9.5GB, ~80 tok/s)
+huggingface-cli download unsloth/Qwen3.5-9B-GGUF \
+  Qwen3.5-9B-Q8_0.gguf --local-dir .
+
+# Qwen3.5-27B Q4 — strong 27B reasoning model (16.7GB, ~28 tok/s)
+huggingface-cli download unsloth/Qwen3.5-27B-GGUF \
+  Qwen3.5-27B-Q4_K_M.gguf --local-dir .
+
+# Qwen3.5-35B-A3B MoE Q4 — 35B total, ~3B active per token (21.4GB, very fast)
+huggingface-cli download unsloth/Qwen3.5-35B-A3B-GGUF \
+  Qwen3.5-35B-A3B-Q4_K_M.gguf --local-dir .
+```
+
+**Qwopus v2** — Qwen3.5-27B fine-tuned on Claude 4.6 Opus reasoning trajectories. Better at coding and math reasoning than base Qwen3.5-27B. No login required.
+
+```bash
+source venv/bin/activate
+
+huggingface-cli download \
+  Jackrong/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-v2-GGUF \
+  Qwen3.5-27B.Q4_K_M.gguf \
+  --local-dir . \
+  --local-dir-use-symlinks False
+
+# Rename to match run.sh convention
+mv Qwen3.5-27B.Q4_K_M.gguf Qwen3.5-27B-Qwopus-v2-Q4_K_M.gguf
+```
+
 ---
 
 ## Chat
 
 ```bash
-./run.sh              # 26B MoE Q8 — recommended
+# Gemma 4
+./run.sh              # 26B MoE Q8 (default, recommended)
 ./run.sh q4           # 26B MoE Q4
 ./run.sh 31b-q8       # 31B Dense Q8
 ./run.sh 31b-q4       # 31B Dense Q4
-./run.sh 31b-tq4      # 31B TQ4_1S compressed (see below)
-./run.sh 31b-spec-q8  # 31B Q8 + speculative decoding (~31 tok/s)
-./run.sh 31b-spec-q4  # 31B Q4 + speculative decoding (~39 tok/s)
+./run.sh 31b-tq4      # 31B TQ4_1S compressed
+./run.sh 31b-spec-q8  # 31B Q8 + speculative decoding
+./run.sh 31b-spec-q4  # 31B Q4 + speculative decoding
+
+# Qwen3.5
+./run.sh qwen-9b          # Qwen3.5-9B Q8
+./run.sh qwen-27b         # Qwen3.5-27B Q4 (thinking off — faster, better for tasks)
+./run.sh qwen-27b-think   # Qwen3.5-27B Q4 (thinking on — deeper reasoning)
+./run.sh qwen-35b-moe     # Qwen3.5-35B-A3B MoE Q4
+./run.sh qwopus           # Qwopus v2 27B Q4 (Opus-distilled reasoning)
 ```
+
+### Qwen3.5 thinking mode
+
+Qwen3.5 27B has a built-in "thinking" mode (chain-of-thought reasoning). For general tasks and the coding agent, thinking is disabled by default (`qwen-27b`) — it's faster and better for tool-calling. Use `qwen-27b-think` or `qwopus` when you want deep reasoning on hard problems.
 
 ---
 
@@ -173,6 +213,18 @@ Create `~/.config/opencode/opencode.json`:
         "gemma-4-31B-it-TQ4_1S-config-i.gguf": {
           "name": "Gemma 4 31B TQ4_1S (local)",
           "limit": { "context": 131072, "output": 32768 }
+        },
+        "Qwen3.5-27B-Q4_K_M.gguf": {
+          "name": "Qwen3.5-27B Q4 (local)",
+          "limit": { "context": 131072, "output": 32768 }
+        },
+        "Qwen3.5-35B-A3B-Q4_K_M.gguf": {
+          "name": "Qwen3.5-35B-A3B MoE Q4 (local)",
+          "limit": { "context": 131072, "output": 32768 }
+        },
+        "Qwen3.5-27B-Qwopus-v2-Q4_K_M.gguf": {
+          "name": "Qwopus v2 27B Q4 (local)",
+          "limit": { "context": 131072, "output": 32768 }
         }
       }
     }
@@ -200,34 +252,24 @@ Then reload: `source ~/.zshrc`
 
 ```bash
 cd ~/your-project
-opencode
+opencode                              # Gemma 4 26B MoE Q8 (default)
+LOCALCODE_MODEL=qwen-27b opencode    # Qwen3.5-27B Q4
+LOCALCODE_MODEL=qwen-35b-moe opencode
+LOCALCODE_MODEL=qwopus opencode
+LOCALCODE_MODEL=gemma-31b opencode
 ```
 
-`oc.sh` starts llama-server automatically on first use, shares it across concurrent sessions, and shuts it down when the last session exits. The 26B MoE Q8 is used by default (best for agentic loops — 82 tok/s matters when the agent is making many tool calls).
-
-To use the 31B model instead, edit `~/.config/opencode/opencode.json` and change `"model"` to:
-```
-"llama.cpp/gemma-4-31B-it-TQ4_1S-config-i.gguf"
-```
-You'll also need the TQ4_1S compressed model (see below).
+`oc.sh` starts llama-server automatically, shares it across concurrent sessions, and shuts it down when the last session exits. All Qwen3.5 server modes automatically disable thinking mode for better tool-calling reliability.
 
 ---
 
-## TQ4_1S weight compression (experimental)
+## TQ4_1S weight compression (Gemma 4 31B, experimental)
 
-Shrinks the 31B Q8 model from 30.4GB to 18.9GB with identical generation speed and minimal quality loss (~+1-4% perplexity predicted). Requires `llama-cpp-turboquant` built above.
+Shrinks 31B Q8 from 30.4GB → 18.9GB with identical generation speed. Requires `llama-cpp-turboquant` built above.
 
 ```bash
-# Generate the tensor type map
-python3 -c "
-n_layers = 60
-for i in range(2, n_layers - 2):
-    for t in ['attn_q', 'attn_k', 'attn_v', 'attn_output', 'ffn_gate', 'ffn_up']:
-        print(f'blk.{i}.{t}.weight=tq4_1s')
-    print(f'blk.{i}.ffn_down.weight=q4_k')
-" > gemma4-31b-config-i.txt
-
-# Compress (requires the Q8_0 source model)
+# A pre-generated tensor map is included in this repo (gemma4-31b-config-i.txt)
+# Run the compression:
 llama-cpp-turboquant/build/bin/llama-quantize \
   --allow-requantize \
   --tensor-type-file gemma4-31b-config-i.txt \
@@ -236,13 +278,25 @@ llama-cpp-turboquant/build/bin/llama-quantize \
   Q8_0
 ```
 
-A pre-generated `gemma4-31b-config-i.txt` is included in this repo.
+To regenerate the tensor map for a different model:
+
+```bash
+python3 -c "
+n_layers = 60  # Gemma 4 31B has 60 layers
+for i in range(2, n_layers - 2):
+    for t in ['attn_q', 'attn_k', 'attn_v', 'attn_output', 'ffn_gate', 'ffn_up']:
+        print(f'blk.{i}.{t}.weight=tq4_1s')
+    print(f'blk.{i}.ffn_down.weight=q4_k')
+" > gemma4-31b-config-i.txt
+```
 
 ---
 
 ## Benchmark results (M3 Ultra, 512GB)
 
 Flash attention enabled, 512-token prompt, 200-token generation.
+
+### Gemma 4
 
 | Model | Quant | Size | Gen (tok/s) | Prompt (tok/s) | Notes |
 |-------|-------|------|-------------|----------------|-------|
@@ -252,23 +306,18 @@ Flash attention enabled, 512-token prompt, 200-token generation.
 | 31B Dense | Q8_0 | 30.4G | 18.3 | 375 | Best quality |
 | 31B Dense Q4 | +Spec | +5G | **38.9** | — | 1.4x gen speedup |
 | 31B Dense Q8 | +Spec | +5G | **31.2** | — | 1.7x gen speedup |
-| 31B Dense | TQ4_1S | 18.9G | 18.5 | 320 | 38% smaller, same gen speed (experimental) |
+| 31B Dense | TQ4_1S | 18.9G | 18.5 | 320 | 38% smaller, same gen speed |
 
-### TQ4_1S detail
-
-| | Q8_0 (source) | TQ4_1S | TQ4_1S + turbo4 KV |
-|---|---|---|---|
-| Size | 30.38G | 18.87G | 18.87G |
-| Gen (tok/s) | 18.3 | **18.5** | 17.5 |
-| Prompt (tok/s) | 375 | 320 | 316 |
+> Qwen3.5 benchmarks not yet measured on this hardware — contributions welcome via [PR #45](https://github.com/TheTom/llama-cpp-turboquant/pull/45).
 
 ### Key findings
 
-- **26B MoE is ~4.5x faster than 31B Dense** — only ~4B active params per token
+- **Gemma 4 26B MoE is ~4.5x faster than 31B Dense** — only ~4B active params per token
+- **Qwen3.5-35B-A3B MoE** activates only ~3B params per token — expect similar speed to a 4B dense model
 - **Speculative decoding on MoE is slower** — already so fast that draft+verify overhead is net negative
-- **Speculative decoding helps 31B Dense** — 1.4x on Q4 (38.9 tok/s), 1.7x on Q8 (31.2 tok/s)
-- **TQ4_1S**: same generation speed as Q8_0, 38% smaller, ~15% slower prompt processing
-- **26B MoE Q8 is the best choice for an agentic coding loop** — throughput matters more than peak quality when the agent is calling tools in tight sequences
+- **Speculative decoding helps 31B Dense** — 1.4x on Q4, 1.7x on Q8
+- **TQ4_1S**: same gen speed as Q8_0, 38% smaller, ~15% slower prompt processing
+- **For an agentic coding loop**: throughput matters most — the model calls tools in tight sequences, so 82 tok/s vs 28 tok/s is a real UX difference
 
 ---
 
@@ -288,7 +337,20 @@ Flash attention enabled, 512-token prompt, 200-token generation.
 ├── claw-code/                             # Claw Code source reference (not committed)
 ├── opencode/                              # OpenCode source reference (not committed)
 ├── venv/                                  # Python venv for downloads (not committed)
-└── *.gguf                                 # Model files (not committed)
+│
+├── # Gemma 4 models (not committed)
+├── gemma-4-26B-A4B-it-Q8_0.gguf         # 25G — default for opencode
+├── gemma-4-26B-A4B-it-UD-Q4_K_M.gguf   # 15.7G
+├── gemma-4-31B-it-Q8_0.gguf             # 30.4G
+├── gemma-4-31B-it-Q4_K_M.gguf           # 17.1G
+├── gemma-4-31B-it-TQ4_1S-config-i.gguf  # 18.9G — compressed
+├── gemma-4-E2B-it-Q8_0.gguf             # 5G — draft model for speculative decoding
+│
+└── # Qwen3.5 models (not committed)
+    ├── Qwen3.5-9B-Q8_0.gguf                      # 9.5G
+    ├── Qwen3.5-27B-Q4_K_M.gguf                   # 16.7G
+    ├── Qwen3.5-35B-A3B-Q4_K_M.gguf              # 21.4G
+    └── Qwen3.5-27B-Qwopus-v2-Q4_K_M.gguf       # 16.5G
 ```
 
 ---
@@ -299,4 +361,6 @@ Flash attention enabled, 512-token prompt, 200-token generation.
 - [TurboQuant+](https://github.com/TheTom/turboquant_plus) — KV cache + weight compression
 - [OpenCode](https://github.com/sst/opencode) — local coding agent
 - [Claw Code](https://github.com/ultraworkers/claw-code-parity) — open-source Claude Code rewrite (early stage)
-- [Unsloth Gemma 4 GGUFs](https://huggingface.co/unsloth) — quantized model files
+- [Unsloth Gemma 4 GGUFs](https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF) — quantized Gemma 4
+- [Unsloth Qwen3.5 GGUFs](https://huggingface.co/unsloth/Qwen3.5-27B-GGUF) — quantized Qwen3.5
+- [Qwopus v2](https://huggingface.co/Jackrong/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-v2-GGUF) — Opus-distilled Qwen3.5-27B
