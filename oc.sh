@@ -35,6 +35,11 @@ case "${LOCALCODE_MODEL:-gemma-26b}" in
     MODEL_LABEL="Qwen3.5-27B Q4"
     MODEL_FLAGS="--chat-template-kwargs {\"enable_thinking\":false}"
     ;;
+  qwen-27b-tq4)
+    MODEL="$DIR/Qwen3.5-27B-TQ4_1S-config-i.gguf"
+    MODEL_LABEL="Qwen3.5-27B TQ4_1S"
+    MODEL_FLAGS="--chat-template-kwargs {\"enable_thinking\":false}"
+    ;;
   qwen-35b-moe)
     MODEL="$DIR/Qwen3.5-35B-A3B-Q4_K_M.gguf"
     MODEL_LABEL="Qwen3.5-35B-A3B Q4 (MoE)"
